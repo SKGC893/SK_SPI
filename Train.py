@@ -10,7 +10,7 @@ from torchvision.transforms import ToTensor
 from skimage.metrics import structural_similarity as ssim
 import torch.amp as amp
 
-from SPItransformer import SPI_Transformer
+from SPI_SwinTransformer import SPISwinTransformer
 from Dataset import get_dataloader
 
 def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, epochs, train_path1, train_path2, valid_path1, valid_path2):

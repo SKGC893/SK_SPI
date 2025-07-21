@@ -5,7 +5,7 @@ import torch.optim as optim
 from torch import nn
 
 from GI import preprocess_hadamard
-from SPItransformer import SPI_Transformer
+from SPI_SwinTransformer import SPISwinTransformer
 from Dataset import get_dataloader
 from Train import train
 
@@ -41,7 +41,7 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using {device} now.")
     print("In images preprocessing.\n")
-    model = SPI_Transformer(M, img_size).to(device)
+    model = SPISwinTransformer(M, img_size).to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
     speckle, _, _ = preprocess_hadamard(img_size)

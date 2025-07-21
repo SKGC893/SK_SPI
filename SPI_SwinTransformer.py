@@ -424,14 +424,27 @@ class SwinTransformerLayer(nn.Module):
         return x, H, W
 
 
-class SPI_SwinTransformer(nn.Module):
-    def __init__(self, patch_size = 4, in_channels = 3, num_classes = 1000, 
+class SPISwinTransformer(nn.Module):
+    def __init__(self, sampling_times, img_size,    # 这两个是最前面卷积的参数
+                 patch_size = 4, in_channels = 1, num_classes = 1000, 
                  embed_dim = 96, depths = (2, 2, 6, 2), num_heads = (3, 6, 12, 24), 
                  window_size = 7, mlp_ratio = 4., qkv_bias = True, 
                  drop_rate = 0., attn_drop_rate = 0., drop_path_rate = 0.1, 
                  norm_layer = nn.LayerNorm, patch_norm = True, 
                  use_checkpoint = False, **kwargs):
         super().__init__()
+        self.sampling_times = sampling_times
+        self.H = img_size
+        self.W = img_size
+        self.fc = nn.Linear(self.sampling_times, self.embed_dim * self.H * self.W)
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim, kernel_size = 3, padding = 'same'), 
+            nn.BatchNorm2d(embed_dim), 
+            nn.ReLU(), 
+            )
+        self.conv2 = nn.Conv2d(embed_dim, embed_dim, kernel_size = 3, padding = 'same')
+        self.conv3 = nn.Conv2d(embed_dim, in_channels, kernel_size = 3, padding = 'same')
+
         self.num_classes = num_classes
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
@@ -478,12 +491,19 @@ class SPI_SwinTransformer(nn.Module):
                 nn.init.constant_(m.bias, 0)
                 nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, x):
-        x, H, W = self.patch_embed(x)
-        x = self.pos_drop(x)
+    def forward(self, x0):
+        x0 = self.fc(x0)
+        x0 = x0.view(x0.shape[0], self.embed_dim, self.H, self.W)
+        x0 = self.conv1(x0)
+        x1 = x0
 
+        x1, H, W = self.patch_embed(x1)
+        x1 = self.pos_drop(x1)
         for layer in self.layers:
-            x, H, W = layer(x, H, W)
+            x1, H, W = layer(x1, H, W)
+        x1 = self.conv2(x1)
+        x = x1 + x0
+        x = self.conv3(x)
 
         x = self.norm(x)
         x = self.avgpool(x.transpose(1, 2))

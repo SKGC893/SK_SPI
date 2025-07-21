@@ -10,7 +10,7 @@ from skimage.metrics import structural_similarity as ssim
 from torch.utils.data import Dataset, DataLoader, Subset
 
 from GI import preprocess_hadamard, CGI
-from SPItransformer import SPI_Transformer
+from SPI_SwinTransformer import SPISwinTransformer
 from Dataset import GI_Dataset
 
 def test_loader(M, img_size, speckle_matrix, batch_size):
@@ -114,7 +114,7 @@ def main():
     print(f"Using {device} now.")
     print("In images preprocessing.\n")
 
-    model = SPI_Transformer(M, img_size)
+    model = SPISwinTransformer(M, img_size)
     pred_dict = torch.load(f'weights/stl10_model_weights_sample={M}.pth')
     # pred_dict = torch.load('weights/mnist_model_weights_sample=1024.pth')
     model.load_state_dict(pred_dict)

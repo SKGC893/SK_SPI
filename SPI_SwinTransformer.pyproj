@@ -11,6 +11,7 @@
     <OutputPath>.</OutputPath>
     <Name>SPI_SwinTransformer</Name>
     <RootNamespace>SPI_SwinTransformer</RootNamespace>
+    <TestFramework>Pytest</TestFramework>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
