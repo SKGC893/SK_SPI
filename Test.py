@@ -14,8 +14,9 @@ from SPI_SwinTransformer import SPISwinTransformer
 from Dataset import GI_Dataset
 
 def test_loader(M, img_size, speckle_matrix, batch_size):
+    # 这里之后考虑使用自定义数据集，比如Set12之类的
     test_imgs = datasets.STL10(
-        root = '../dataset/SPItransformer/STL-10/test_imgs', 
+        root = '../dataset/SPI_SwinTransformer/STL-10/test_imgs', 
         split = 'test', 
         download = True, 
         transform = transforms.Compose([
@@ -25,6 +26,20 @@ def test_loader(M, img_size, speckle_matrix, batch_size):
             transforms.Grayscale(num_output_channels = 1), 
             ])
         )
+
+    # test_imgs = datasets.MNIST(
+    #     root = '../dataset/SPI_SwinTransformer/MNIST/test_imgs', 
+    #     # split = 'test', 
+    #     train = False, 
+    #     download = True, 
+    #     transform = transforms.Compose([
+    #         transforms.Resize((img_size, img_size)), 
+    #         transforms.ToTensor(), 
+    #         # transforms.Normalize((0.430, 0.417, 0.363), (0.231, 0.226, 0.223)), 
+    #         transforms.Grayscale(num_output_channels = 1), 
+    #         ])
+    #     )
+
     test_data = test_imgs
 
     test_dataloader = DataLoader(
@@ -121,8 +136,8 @@ def main():
     model = model.to(device)
     loss_fn = nn.MSELoss()
 
-    test_path1 = '../pictures/Transformer_SPI/test_images/original'
-    test_path2 = '../pictures/Transformer_SPI/test_images/reconstruction'
+    test_path1 = '../pictures/SPI_SwinTransformer/test_images/original'
+    test_path2 = '../pictures/SPI_SwinTransformer/test_images/reconstruction'
     os.makedirs(test_path1, exist_ok = True)
     os.makedirs(test_path2, exist_ok = True)
 

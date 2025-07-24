@@ -28,10 +28,10 @@ def main():
     img_size = 32
     learning_rate = 0.0001
     drop = 0.1
-    train_path1 = '../pictures/SPItransformer/train_images/original'
-    train_path2 = '../pictures/SPItransformer/train_images/reconstruction'
-    valid_path1 = '../pictures/SPItransformer/valid_images/original'
-    valid_path2 = '../pictures/SPItransformer/valid_images/reconstruction'
+    train_path1 = '../pictures/SPI_SwinTransformer/train_images/original'
+    train_path2 = '../pictures/SPI_SwinTransformer/train_images/reconstruction'
+    valid_path1 = '../pictures/SPI_SwinTransformer/valid_images/original'
+    valid_path2 = '../pictures/SPI_SwinTransformer/valid_images/reconstruction'
     weights_path = 'weights'
     os.makedirs(train_path1, exist_ok = True)
     os.makedirs(train_path2, exist_ok = True)

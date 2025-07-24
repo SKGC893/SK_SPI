@@ -63,8 +63,8 @@ class GI_Dataset(Dataset):
 
 def get_dataloader(M, img_size, speckle_matrix, batch_size):
     train_imgs = datasets.STL10(
-        root = '../dataset/SPItransformer/STL-10/train_imgs', 
-        split = 'train', 
+        root = '../dataset/SPI_SwinTransformer/STL-10/train_imgs', 
+        split = 'unlabeled', 
         download = True, 
         transform = transforms.Compose([
             transforms.Resize((img_size, img_size)), 
@@ -73,6 +73,20 @@ def get_dataloader(M, img_size, speckle_matrix, batch_size):
             # transforms.Normalize((0.4497, ), (0.2262, )), 
             ])
         )
+
+    # train_imgs = datasets.MNIST(
+    #     root = '../dataset/SPI_SwinTransformer/MNIST/train_imgs', 
+    #     # split = 'train', 
+    #     train = True, 
+    #     download = True, 
+    #     transform = transforms.Compose([
+    #         transforms.Resize((img_size, img_size)), 
+    #         transforms.ToTensor(), 
+    #         # transforms.Grayscale(num_output_channels = 1), 
+    #         # transforms.Normalize((0.4497, ), (0.2262, )), 
+    #         ])
+    #     )
+
 
     # 随机选取80%作为训练集，20%作为验证集
     train_size = int(len(train_imgs) * 0.8)

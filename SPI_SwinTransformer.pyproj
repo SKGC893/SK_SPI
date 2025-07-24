@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>59923892-56a8-47d4-9bc5-34e7ab54867b</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>SPI_SwinTransformer.py</StartupFile>
+    <StartupFile>main.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
