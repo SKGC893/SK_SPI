@@ -457,10 +457,10 @@ class SwinTransformerBlock(nn.Module):
         '''partition windows窗口分割部分
         将移位之后的特征图划分为互不重叠没有缝隙的窗口，计算窗口注意力'''
         x_windows = window_partition(shifted_x, self.window_size)
-        x_windows = x_windows.view(-1, self.window_size * self.wndow_size, C)
+        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)
 
         # W-MSA/SW-MSA
-        attn_windows = self.attn(x_windows, mask = attn_windows)
+        attn_windows = self.attn(x_windows, mask = attn_mask)
 
         '''merge windows窗口合并部分
         将计算注意力之后的各个窗口重新拼接为完整的特征图形式'''
@@ -656,8 +656,33 @@ class SwinTransformerLayer(nn.Module):
         return x, H, W
 
 
+# 在Swin Transformer之前的CNN预处理，生成特征图
+class SPICNN(nn.Module):
+    def __init__(self, sampling_times, img_size, dropout):
+        super().__init__()
+        self.sampling_times = sampling_times
+        self.img_size = img_size
+
+        self.fc = nn.Sequential(
+            nn.Linear(self.sampling_times, self.img_size ** 2), 
+            nn.Dropout(dropout), 
+            )
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(dropout), 
+            )
+    
+    def forward(self, x):
+        x = self.fc(x)
+        x = x.view(-1, 1, self.img_size, self.img_size)
+        output = self.conv(x)
+        return output
+
+
 class SPISwinTransformer(nn.Module):
-    def __init__(self, patch_size = 4, in_channels = 1, num_classes = 1000, 
+    def __init__(self, sampling_times, img_size, dropout,   # 这里是卷积预处理的参数
+                 patch_size = 4, in_channels = 1, num_classes = 1000, 
                  embed_dim = 96, depths = (2, 2, 6, 2), num_heads = (3, 6, 12, 24), 
                  window_size = 7, mlp_ratio = 4., qkv_bias = True, 
                  drop_rate = 0., attn_drop_rate = 0., drop_path_rate = 0.1, 
@@ -671,6 +696,9 @@ class SPISwinTransformer(nn.Module):
         # self.num_features = int(embed_dim ** 2 ** (self.num_layers - 1))
         self.num_features = int(embed_dim * (2 ** (self.num_layers - 1)))       # 因为上面那个占用内存过于离谱（28PB）所以改了
         self.mlp_ratio = mlp_ratio
+
+        # 卷积预处理
+        self.preprocess = SPICNN(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
 
         '''你的错误信息显示 weight of size [96, 1, 4, 4]，这意味着 PatchEmbed 在创建 self.proj 时，in_c 被设置成了 1。但是，实际传入的 x 的通道数却是 96。 这很可能是你在实例化 SPISwinTransformer 时，没有明确指定 in_channels 参数，或者错误地将它设置为 1，而你的数据却不是 1 通道。
 

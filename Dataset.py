@@ -57,7 +57,7 @@ class GI_Dataset(Dataset):
         return self.max_samples
     
     def __getitem__(self, idx):
-        # 直接返回预计算的结果，这里最后出来的数据格式是[B, C, M]
+        # 这里就是对应的元组，包含gi桶探测值和原始图像两个张量
         return self.precomputed_cgi[idx]
 
 
@@ -106,5 +106,7 @@ def get_dataloader(M, img_size, speckle_matrix, batch_size):
         shuffle = True, 
         )
 
-    # 这里和前面的一样，数据类型是[C, H, W]，具体数值是[1, 32, 32]
+    '''这里返回的是Pytorch的DataLoader对象，包含了各个批次
+    每个批次的结构是一个包含两个张量的元组(batch_gi, batch_original_images)，前者是桶探测值，后者是原始图像
+    对batch_gi，其类型是[B, C, M]；对batch_original_images，其类型是[B, C, H, W]'''
     return train_dataloader, valid_dataloader

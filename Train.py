@@ -29,8 +29,9 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
     train_ssim = 0.
 
     for batch_idx, (x, y) in enumerate(dataloader1):
+        '''这里x对应self.precomputed_cgi[idx][0]，y对应self.precomputed_cgi[idx][1]'''
         x, y = x.to(device), y.to(device)
-        x = x.squeeze(1)# .squeeze(-1) # 将 [batch_size, 1, M, 1] 变为 [batch_size, M]
+        # x = x.squeeze(1)# .squeeze(-1) # 将 [batch_size, 1, M, 1] 变为 [batch_size, M]
 
         with amp.autocast('cuda'): # 自动混合精度
             pred = model(x)
