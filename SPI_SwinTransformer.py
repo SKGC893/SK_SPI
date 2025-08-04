@@ -61,7 +61,7 @@ def window_reverse(windows, window_size, H, W):
 
 
 class PatchEmbed(nn.Module):
-    '''这里就是ViT继承过来的重要部分了
+    '''这里就是ViT继承过来的重要部分了 
     为了让transformer能够处理图像而不是NLP中的序列，ViT将图像分成许多patches
     之后，每个patch都当作一个token。这个模块的作用就是将图像转换为token
     
