@@ -33,10 +33,18 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
         x, y = x.to(device), y.to(device)
         # x = x.squeeze(1)# .squeeze(-1) # 将 [batch_size, 1, M, 1] 变为 [batch_size, M]
 
-        with amp.autocast('cuda'): # 自动混合精度
-            pred = model(x)
-            # 修正：直接使用y，因为它已经是灰度图
-            loss = loss_fn(pred, y) # <-- 修正：这里使用y
+        # with amp.autocast('cuda'): # 自动混合精度
+        #     pred = model(x)
+        #     # 修正：直接使用y，因为它已经是灰度图
+        #     loss = loss_fn(pred, y) # <-- 修正：这里使用y
+        pred = model(x)
+
+        '''这里出错是因为pred和y的形状不匹配
+        pred是[B, 1000]
+        y是[B, C, H, W]
+        我觉得问题应该是处理了之后没有重构成图像，还只是一堆数据'''
+        loss = loss_fn(pred, y)
+
 
         optimizer.zero_grad()
         scaler.scale(loss).backward() # <-- 使用scaler.scale(loss)

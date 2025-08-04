@@ -83,6 +83,7 @@ class PatchEmbed(nn.Module):
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
+        # 这里会出现一个问题就是，我这里的x是[B, C, M]的形状，还没有经过卷积层的重构变成特征图
         _, _, H, W = x.shape
 
         # padding，这里这么写是为了提高泛化能力，确保patch长宽不一致的情况也能处理
@@ -449,7 +450,7 @@ class SwinTransformerBlock(nn.Module):
         根据shift_size的大小判断是SW-MSA还是W-MSA的层
         shift_size == 0 说明窗口没有移位，就是W-MSA层'''
         if self.shift_size > 0:
-            shifted_x = torch.roll(x, shifts = (-self.shift_size, -self.shift_size), dimg = (1, 2))
+            shifted_x = torch.roll(x, shifts = (-self.shift_size, -self.shift_size), dims = (1, 2))
         else:
             shifted_x = x
             attn_mask = None
@@ -464,7 +465,7 @@ class SwinTransformerBlock(nn.Module):
 
         '''merge windows窗口合并部分
         将计算注意力之后的各个窗口重新拼接为完整的特征图形式'''
-        attn_windows = attn_windows.view(-1, self.windows_size, self.window_size, C)
+        attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
         shifted_x = window_reverse(attn_windows, self.window_size, Hp, Wp)
 
         '''reverse cyclic shift逆向循环移位
@@ -682,7 +683,8 @@ class SPICNN(nn.Module):
 
 class SPISwinTransformer(nn.Module):
     def __init__(self, sampling_times, img_size, dropout,   # 这里是卷积预处理的参数
-                 patch_size = 4, in_channels = 1, num_classes = 1000, 
+                 patch_size = 4, in_channels = 1, 
+                 num_classes = 1000,    # 这个num_classes是用在图像分类任务中的类别数
                  embed_dim = 96, depths = (2, 2, 6, 2), num_heads = (3, 6, 12, 24), 
                  window_size = 7, mlp_ratio = 4., qkv_bias = True, 
                  drop_rate = 0., attn_drop_rate = 0., drop_path_rate = 0.1, 
@@ -698,14 +700,7 @@ class SPISwinTransformer(nn.Module):
         self.mlp_ratio = mlp_ratio
 
         # 卷积预处理
-        self.preprocess = SPICNN(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
-
-        '''你的错误信息显示 weight of size [96, 1, 4, 4]，这意味着 PatchEmbed 在创建 self.proj 时，in_c 被设置成了 1。但是，实际传入的 x 的通道数却是 96。 这很可能是你在实例化 SPISwinTransformer 时，没有明确指定 in_channels 参数，或者错误地将它设置为 1，而你的数据却不是 1 通道。
-
-情况 2: 代码逻辑错误，PatchEmbed 被用于处理中间特征而非原始图像
-另一种可能性是，你的代码逻辑上将 PatchEmbed 用在了错误的地方，即它不是在处理原始图像，而是在处理网络中间层的输出。
-
-PatchEmbed 模块专门设计用于将原始图像（通常是 3 通道 RGB 或 1 通道灰度）转换为 token 嵌入。它不应该用于处理 Swin Transformer 内部不同阶段的特征图。对于 Swin Transformer 内部的维度变化，应该由 PatchMerging 模块来处理。'''
+        self.feature_map = SPICNN(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
         self.patch_embed = PatchEmbed(
             patch_size = patch_size, in_c = in_channels, embed_dim = embed_dim, 
             norm_layer = norm_layer if self.patch_norm else None)
@@ -733,6 +728,10 @@ PatchEmbed 模块专门设计用于将原始图像（通常是 3 通道 RGB 或 
 
         self.norm = norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
+
+        '''问题就出在这里，原本的Swin Transformer是针对ImageNet的分类任务
+        这里的num_classes是分类任务的类别数，如果是0就表示不进行分类任务
+        但是这里我是将他的原理挪用到GI图像重构上了，所以这里还得改'''
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
         
         self.apply(self._init_weights)
@@ -748,7 +747,7 @@ PatchEmbed 模块专门设计用于将原始图像（通常是 3 通道 RGB 或 
                 nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x):
-
+        x = self.feature_map(x)
         x, H, W = self.patch_embed(x)
         x = self.pos_drop(x)
         for layer in self.layers:
