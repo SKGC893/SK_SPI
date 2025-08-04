@@ -658,7 +658,7 @@ class SwinTransformerLayer(nn.Module):
 
 
 # 在Swin Transformer之前的CNN预处理，生成特征图
-class SPICNN(nn.Module):
+class preCNN(nn.Module):
     def __init__(self, sampling_times, img_size, dropout):
         super().__init__()
         self.sampling_times = sampling_times
@@ -681,10 +681,57 @@ class SPICNN(nn.Module):
         return output
 
 
+# 在Swin Transformer处理后的CNN模块，重构成GI图像
+class afterCNN(nn.Module):
+    def __init__(self, in_channels, img_size, dropout):
+        super().__init__()
+        self.in_channels = in_channels
+        self.img_size = img_size
+        self.dropout = dropout
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(self.in_channels, 128, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(self.dropout), 
+            )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(self.dropout), 
+            )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(64, 32, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(self.dropout), 
+            )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(32, 1, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(self.dropout), 
+            )
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        output = self.conv4(x)
+        return output
+
+
+class UpSample(nn.Module):
+    def __init__(self, ):
+        super().__init__()
+        self.upsample = nn.Upsample(scale_factor = 2, )
+
+    def forward(self, x):
+        output = self.upsample(x)
+        return output
+
+
 class SPISwinTransformer(nn.Module):
     def __init__(self, sampling_times, img_size, dropout,   # 这里是卷积预处理的参数
                  patch_size = 4, in_channels = 1, 
-                 num_classes = 1000,    # 这个num_classes是用在图像分类任务中的类别数
+                 # num_classes = 1000,    # 这个num_classes是用在图像分类任务中的类别数
                  embed_dim = 96, depths = (2, 2, 6, 2), num_heads = (3, 6, 12, 24), 
                  window_size = 7, mlp_ratio = 4., qkv_bias = True, 
                  drop_rate = 0., attn_drop_rate = 0., drop_path_rate = 0.1, 
@@ -692,7 +739,7 @@ class SPISwinTransformer(nn.Module):
                  use_checkpoint = False, **kwargs):
         '''这里depths和num_heas原本是元组，是为了适配源代码中的多尺度不同情况，实际上使用的时候只用一个就可以了'''
         super().__init__()
-        self.num_classes = num_classes
+        # self.num_classes = num_classes
         self.num_layers = len(depths)
         self.patch_norm = patch_norm
         # self.num_features = int(embed_dim ** 2 ** (self.num_layers - 1))
@@ -700,7 +747,7 @@ class SPISwinTransformer(nn.Module):
         self.mlp_ratio = mlp_ratio
 
         # 卷积预处理
-        self.feature_map = SPICNN(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
+        self.feature_map = preCNN(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
         self.patch_embed = PatchEmbed(
             patch_size = patch_size, in_c = in_channels, embed_dim = embed_dim, 
             norm_layer = norm_layer if self.patch_norm else None)
@@ -727,13 +774,14 @@ class SPISwinTransformer(nn.Module):
             self.layers.append(layers)
 
         self.norm = norm_layer(self.num_features)
-        self.avgpool = nn.AdaptiveAvgPool1d(1)
+
 
         '''问题就出在这里，原本的Swin Transformer是针对ImageNet的分类任务
         这里的num_classes是分类任务的类别数，如果是0就表示不进行分类任务
         但是这里我是将他的原理挪用到GI图像重构上了，所以这里还得改'''
-        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
-        
+        # self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+        self.upsample = UpSample()
+        self.picture = afterCNN(in_channels = self.num_features, img_size = img_size, dropout = dropout)
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -748,201 +796,18 @@ class SPISwinTransformer(nn.Module):
 
     def forward(self, x):
         x = self.feature_map(x)
+        x0 = x
         x, H, W = self.patch_embed(x)
         x = self.pos_drop(x)
         for layer in self.layers:
             x, H, W = layer(x, H, W)
 
         x = self.norm(x)
-        x = self.avgpool(x.transpose(1, 2))
-        x = torch.flatten(x, 1)
-        output = self.head(x)
+
+        B, L, C = x.shape
+        x = x.view(B, L // 2, L // 2, C)    # [B, H, W, C]
+        x = x.permute(0, 3, 1, 2)   # [B, C, H, W]
+
+        x = self.upsample(x)
+        output = self.picture(x)
         return output
-
-
-
-'''关于GI预处理后的输入数据，其数据类型是[B, C, M]，其中B是batch_size，C是通道数，M是采样次数(num_measurements)
-最初输入全连接层的数据类型应该是[B, M]'''
-
-
-# class TransformerLayer(nn.Module):
-#     '''这里实际上就是简化后的swin transformer层
-#     主要是使用了自定义的注意力模块，还有一些细节修改
-#     没有窗口移位操作'''
-#     def __init__(self, dim, input_resolution, num_heads, window_size = 7, 
-#                  mlp_ratio = 4, qkv_bias = True, qk_scale = None, drop = 0., 
-#                  attn_drop = 0., drop_path = 0., act_layer = nn.GELU, norm_layer = nn.LayerNorm):
-#         super(TransformerLayer, self).__init__()
-#         self.dim = dim
-#         self.input_resoulution = input_resolution
-#         self.num_heads = num_heads
-#         self.window_size = window_size
-#         self.mlp_ratio = mlp_ratio
-
-#         self.norm1 = nn.LayerNorm(dim)
-#         # self.attn = nn.MultiheadAttention(embed_dim = dim, num_heads = num_heads, bias = qkv_bias, dropout = attn_drop)
-#         self.attn = WindowAttention(dim, window_size = window_size, num_heads = num_heads, 
-#                                     qkv_bias = qkv_bias, attn_drop = attn_drop, proj_drop = drop)
-
-#         self.drop_path = nn.Identity() if drop_path == 0 else DropPath(drop_path)
-
-#         self.norm2 = nn.LayerNorm(dim)
-#         mlp_hidden_dim = int(dim * mlp_ratio)       # MLP的首个全连接层输出维度，通常是原始输入维度的2倍或4倍
-#         self.mlp = MLP(in_features = dim, hidden_features = mlp_hidden_dim, act_layer = act_layer, drop = drop)
-
-#     def forward(self, x):
-#         '''这里的sequence_length = H * W，dim就是对应的C
-#         首先将x的维度从（B, C, H, W）转换为（H * W, B, C），也就是我们需要的
-#         x: (sequence_length, batch_size, dim)'''
-#         B, C, H, W = x.shape
-
-#         # 转换维度匹配swin transformer习惯[B, H, W, C]
-#         x = x.permute(0, 2, 3, 1).contiguous()
-
-#         shortcut = x
-#         x = self.norm1(x)
-
-#         '''确保H和W是window_size的倍数，保证无缝切割
-#         这里是直接填充的，但是我记着正经的swin transformer另有高招'''
-#         pad_h = (self.window_size - H % self.window_size) % self.window_size
-#         pad_w = (self.window_size - W % self.window_size) % self.window_size
-#         if pad_h > 0 or pad_w > 0:
-#             # 如果不是整数倍，就进行填充，这里可能会影响性能
-#             x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))        # [B, H_padded, W_padded, C]
-
-#         Hp, Wp = x.shape[1], x.shape[2]
-
-#         x_windows = window_partition(x, self.window_size)
-#         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)
-
-#         attn_windows = self.attn(x_windows, mask = None)
-#         x = window_reverse(attn_windows, self.window_size, Hp, Wp)
-
-#         if pad_h >0 or pad_w > 0:
-#             # 去除之前的填充
-#             x = x[:, :H, :W, :].contiguout()
-
-#         # FFN
-#         x = shortcut + self.dorp_path(x)
-#         x = x + self.dorp_path(self.mlp(self.norm2(x)))
-
-#         # 恢复到[B, C, H, W]
-#         output = x.permute(0, 3, 1, 2).contiguous()
-        
-#         return output
-
-
-# # class TransformerLayer(nn.Module):
-# #     def __init__(self, dim, num_heads, mlp_ratio = 4, qkv_bias = False, qk_scale = None, drop = 0, 
-# #                  attn_drop = 0, drop_path = 0, act_layer = nn.GELU, norm_layer = nn.LayerNorm):
-# #         super(TransformerLayer, self).__init__()
-
-# #         self.norm1 = nn.LayerNorm(dim)
-
-# #         self.attn = nn.MultiheadAttention(embed_dim = dim, num_heads = num_heads, bias = qkv_bias, dropout = attn_drop)
-# #         self.drop_path = nn.Identity() if drop_path == 0 else DropPath(drop_path)
-
-# #         self.norm2 = nn.LayerNorm(dim)
-# #         mlp_hidden_dim = int(dim * mlp_ratio)       # MLP的首个全连接层输出维度，通常是原始输入维度的2倍或4倍
-# #         self.mlp = MLP(in_features = dim, hidden_features = mlp_hidden_dim, act_layer = act_layer, drop = drop)
-
-# #     def forward(self, x):
-# #         '''这里的sequence_length = H * W，dim就是对应的C
-# #         首先将x的维度从（B, C, H, W）转换为（H * W, B, C），也就是我们需要的
-# #         x: (sequence_length, batch_size, dim)'''
-# #         B, C, H, W = x.shape
-# #         x_flat = x.flatten(2).permute(2, 0, 1)       # flatten(start_dim, end_dim)把从start维度开始到end维度展平，并且展平后的维度是被展平的所有维度的乘积
-
-# #         x_norm1 = self.norm1(x_flat)
-# #         x_attn, _ = self.attn(x_norm1, x_norm1, x_norm1)     # MultiheadAttention的输入是(query, key, value)，这里先都用x表示是固定窗口
-# #         x = x_attn + x_flat
-# #         x = self.drop_path(x)
-# #         x_norm2 = self.norm2(x)
-# #         x_mlp = self.mlp(x_norm2)
-# #         output = x_mlp + x
-# #         output = self.drop_path(output)
-
-# #         # 这里用view而不用reshape，因为view不会复制数据本身，在大规模训练的时候更高效
-# #         output = output.permute(1, 2, 0).view(B, C, H, W)       # 将输出的维度转换回（B, C, H, W）
-# #         return output
-
-
-# # 这部分也有更新
-# class TransformerBlock(nn.Module):
-#     def __init__(self, dim, num_heads, img_size, mlp_ratio = 4, qkv_bias = False, qk_scale = None, drop = 0., attn_drop = 0., 
-#                  drop_path = 0., act_layer = nn.GELU, norm_layer = nn.LayerNorm, window_size = 7):
-#         super(TransformerBlock, self).__init__()
-
-#         self.transformer_layers = nn.ModuleList([
-#             TransformerLayer(dim = dim, input_resolution = (img_size, img_size), num_heads = num_heads, 
-#                              window_size = window_size, mlp_ratio = mlp_ratio, qkv_bias = qkv_bias, qk_scale = qk_scale, 
-#                              drop = drop, attn_drop = attn_drop, drop_path = drop_path, 
-#                               act_layer = act_layer, norm_layer = norm_layer, )
-#             for _ in range(4)
-#             ])
-#         self.conv = nn.Conv2d(dim, dim, kernel_size = 3, padding = 'same')
-
-#     def forward(self, x):
-#         for layer in self.transformer_layers:
-#             x = layer(x)
-#         output = self.conv(x)
-#         return output
-
-
-# # 这里是自己编写的SPItransformer模块
-# class SPI_Transformer(nn.Module):
-#     '''假设现在sampling_times = 1024, img_size = 32'''
-#     def __init__(self, sampling_times, img_size, embed_dim = 96, num_heads = 8, in_channels = 1, window_size = 7):# , drop):
-#         super(SPI_Transformer, self).__init__()
-#         self.sampling_times = sampling_times
-#         self.img_size = img_size
-#         # self.drop = drop
-
-#         '''embed_dim特征维度
-#         当经过前端卷积处理后的特征图被分割成一个个小图像块（patches）后，embed_dim 参数定义了每个图像块被线性投影（或者说“嵌入”）到的特征空间维度
-#         比如特征图是4*4*1，embed_dim=96就说明这个patch中的16个像素的信息会被扩展到96维
-#         每个patch生成的这个embed_dim维度的特征向量就对应每个token'''
-#         self.embed_dim = embed_dim
-
-#         self.H = self.img_size
-#         self.W = self.img_size
-#         # Swin Transformer中这里是直接在卷积层上构建token的
-#         '''事前提醒：这个原因是ai给的，不保证准确
-#         对于patch embedding，ViT选择使用全连接层，swin transformer却用的是卷积层
-#         因为ViT是学习NLP领域的token embedding方法，将每个patch视作token，用线性投影生成token
-#         swin transformer则强调吸收CNN的局部特征提取的优点，因此使用卷积层生成token'''
-#         self.fc = nn.Linear(self.sampling_times, self.embed_dim * self.H * self.W)      # 这会让后面的输入通道变成embed_dim
-#         self.conv1 = nn.Sequential(
-#             nn.Conv2d(embed_dim, embed_dim, kernel_size = 3, padding = 'same'), 
-#             nn.BatchNorm2d(embed_dim), 
-#             nn.ReLU(), 
-#             )
-
-#         self.transformer_blocks = nn.ModuleList([
-#             TransformerBlock(dim = embed_dim, num_heads = num_heads, 
-#                              img_size = img_size, window_size = window_size) for _ in range(4)
-#             ])
-#         self.conv2 = nn.Conv2d(embed_dim, embed_dim, kernel_size = 3, padding = 'same')
-
-#         self.conv3 = nn.Conv2d(embed_dim, in_channels, kernel_size = 3, padding = 'same')
-
-#     def forward(self, x0):
-#         '''x0: [batch_size, sampling_times]
-#         理应是这样的，但是这里的问题就在于，本来应该是[batch_size, sampling_times, 1]的输入
-#         处理时并没有将batch_size放在最前，而是将batch_size和sampling_times相乘了
-#         最终导致维度不匹配'''
-#         # print(f"Shape of x0 before self.fc: {x0.shape}\n") # <-- 添加这行
-#         # x0 = self.fc(x0.view(-1, 1024))
-#         x0 = self.fc(x0)
-#         x0 = x0.view(x0.shape[0], self.embed_dim, self.H, self.W)      #[batch_size, embed_dim, H, W]
-#         x0 = self.conv1(x0)
-
-#         x1 = x0
-#         for block in self.transformer_blocks:
-#             x1 = block(x1)
-#         x1 = self.conv2(x1)
-
-#         x = x0 + x1
-#         output = self.conv3(x)
-#         return output
-
