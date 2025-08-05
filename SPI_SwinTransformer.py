@@ -689,32 +689,14 @@ class afterCNN(nn.Module):
         self.img_size = img_size
         self.dropout = dropout
 
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(self.in_channels, 128, kernel_size = 3, padding = 'same'), 
-            nn.ReLU(), 
-            nn.Dropout(self.dropout), 
-            )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(128, 64, kernel_size = 3, padding = 'same'), 
-            nn.ReLU(), 
-            nn.Dropout(self.dropout), 
-            )
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(64, 32, kernel_size = 3, padding = 'same'), 
-            nn.ReLU(), 
-            nn.Dropout(self.dropout), 
-            )
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(32, 1, kernel_size = 3, padding = 'same'), 
+        self.conv = nn.Sequential(
+            nn.Conv2d(self.in_channels, 32, kernel_size = 3, padding = 'same'), 
             nn.ReLU(), 
             nn.Dropout(self.dropout), 
             )
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        output = self.conv4(x)
+        output = self.conv(x)
         return output
 
 
