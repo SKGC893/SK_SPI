@@ -41,7 +41,7 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using {device} now.")
     print("In images preprocessing.\n")
-    model = SPISwinTransformer(M, img_size).to(device)
+    model = SPISwinTransformer(M, img_size, drop).to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
     speckle, _, _ = preprocess_hadamard(img_size)

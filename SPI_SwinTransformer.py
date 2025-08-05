@@ -1,11 +1,101 @@
 # 一点一点把他改成swin transformer吧
 
+from tkinter import SE
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 import numpy as np
 from typing import Optional
+
+
+# 在Swin Transformer之前的CNN预处理，生成特征图
+class preprocess(nn.Module):
+    def __init__(self, sampling_times, img_size, dropout):
+        super().__init__()
+        self.sampling_times = sampling_times
+        self.img_size = img_size
+
+        self.fc = nn.Sequential(
+            nn.Linear(self.sampling_times, self.img_size ** 2), 
+            nn.Dropout(dropout), 
+            )
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, 1, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(dropout), 
+            )
+    
+    def forward(self, x):
+        x = self.fc(x)
+        x = x.view(-1, 1, self.img_size, self.img_size)
+        output = self.conv(x)
+        return output
+
+
+# 在每个transformer block后的卷积
+class transformer_cnn(nn.Module):
+    def __init__(self, in_channels, dropout):
+        super().__init__()
+        self.in_channels = in_channels
+        self.dropout = dropout
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(self.dropout), 
+            )
+
+    def forward(self, x):
+        output = self.conv(x)
+        return output
+
+
+# 在4个block处理后的CNN模块
+class block_cnn(nn.Module):
+    def __init__(self, in_channels, dropout):
+        super().__init__()
+        self.in_channels = in_channels
+        self.dropout = dropout
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(self.dropout), 
+            )
+
+    def forward(self, x):
+        output = self.conv(x)
+        return output
+
+
+# 恢复成GI图像
+class last_cnn(nn.Module):
+    def __init__(self, in_channels, dropout):
+        super().__init__()
+        self.in_channels = in_channels
+        self.dropout = dropout
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(self.in_channels, 1, kernel_size = 3, padding = 'same'), 
+            nn.ReLU(), 
+            nn.Dropout(self.dropout), 
+            )
+
+    def forward(self, x):
+        output = self.conv(x)
+        return output
+
+
+# 恢复前的上采样
+class UpSample(nn.Module):
+    def __init__(self, ):
+        super().__init__()
+        self.upsample = nn.Upsample(scale_factor = 32, )
+
+    def forward(self, x):
+        output = self.upsample(x)
+        return output
 
 
 class DropPath(nn.Module):
@@ -430,6 +520,8 @@ class SwinTransformerBlock(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = MLP(in_features = dim, hidden_features = mlp_hidden_dim, act_layer = act_layer, drop = drop)
 
+
+
     def forward(self, x, attn_mask):
         H, W = self.H, self.W
         B, L, C = x.shape
@@ -507,7 +599,7 @@ class SwinTransformerLayer(nn.Module):
     def __init__(self, dim, depth, num_heads, window_size, 
                  mlp_ratio = 4, qkv_bias = True, drop = 0., attn_drop = 0., 
                  drop_path = 0., norm_layer = nn.LayerNorm, 
-                 downsample = None, use_checkpoint = False, ):
+                 downsample = None, use_checkpoint = False, dropout = 0.1):
         super().__init__()
         self.dim = dim
         self.depth = depth
@@ -515,6 +607,8 @@ class SwinTransformerLayer(nn.Module):
         self.window_size = window_size
         self.use_checkpoint = use_checkpoint
         self.shift_size = window_size // 2      # 设计好的超参数，设置成window_size的一半既能保证计算效率又能提升模型性能
+
+        self.conv = transformer_cnn(in_channels = self.num_features, dropout = dropout)
 
         self.blocks = nn.ModuleList([
             SwinTransformerBlock(
@@ -643,6 +737,7 @@ class SwinTransformerLayer(nn.Module):
         原本的SwinTransformer针对的是固定的输入尺寸
         如果输入尺寸和最初设定不同是无法正常生成mask的
         此外，这里和原图所给的stage不同，这里的写法是当前的stage和下一个stage的patch merging'''
+        x0 = x
         attn_mask = self.create_mask(x, H, W)
         for blk in self.blocks:
             blk.H, blk.W = H, W
@@ -650,76 +745,26 @@ class SwinTransformerLayer(nn.Module):
                 x = checkpoint.checkpoint(blk, x, attn_mask)
             else:
                 x = blk(x, attn_mask)
+        x = self.conv(x)
+        output = x0 + x
         if self.downsample is not None:
             x = self.downsample(x, H, W)
             H, W = (H + 1) // 2, (W + 1) // 2
 
-        return x, H, W
-
-
-# 在Swin Transformer之前的CNN预处理，生成特征图
-class preCNN(nn.Module):
-    def __init__(self, sampling_times, img_size, dropout):
-        super().__init__()
-        self.sampling_times = sampling_times
-        self.img_size = img_size
-
-        self.fc = nn.Sequential(
-            nn.Linear(self.sampling_times, self.img_size ** 2), 
-            nn.Dropout(dropout), 
-            )
-        self.conv = nn.Sequential(
-            nn.Conv2d(1, 1, kernel_size = 3, padding = 'same'), 
-            nn.ReLU(), 
-            nn.Dropout(dropout), 
-            )
-    
-    def forward(self, x):
-        x = self.fc(x)
-        x = x.view(-1, 1, self.img_size, self.img_size)
-        output = self.conv(x)
-        return output
-
-
-# 在Swin Transformer处理后的CNN模块，重构成GI图像
-class afterCNN(nn.Module):
-    def __init__(self, in_channels, img_size, dropout):
-        super().__init__()
-        self.in_channels = in_channels
-        self.img_size = img_size
-        self.dropout = dropout
-
-        self.conv = nn.Sequential(
-            nn.Conv2d(self.in_channels, 32, kernel_size = 3, padding = 'same'), 
-            nn.ReLU(), 
-            nn.Dropout(self.dropout), 
-            )
-
-    def forward(self, x):
-        output = self.conv(x)
-        return output
-
-
-class UpSample(nn.Module):
-    def __init__(self, ):
-        super().__init__()
-        self.upsample = nn.Upsample(scale_factor = 2, )
-
-    def forward(self, x):
-        output = self.upsample(x)
-        return output
+        return output, H, W
 
 
 class SPISwinTransformer(nn.Module):
     def __init__(self, sampling_times, img_size, dropout,   # 这里是卷积预处理的参数
                  patch_size = 4, in_channels = 1, 
                  # num_classes = 1000,    # 这个num_classes是用在图像分类任务中的类别数
-                 embed_dim = 96, depths = (2, 2, 6, 2), num_heads = (3, 6, 12, 24), 
+                 embed_dim = 64, 
+                 depths = (2, 2, 6, 2),     # 每个stage中分别有几个block
+                 num_heads = (3, 6, 12, 24),    # 每个stage中的注意力头数
                  window_size = 7, mlp_ratio = 4., qkv_bias = True, 
                  drop_rate = 0., attn_drop_rate = 0., drop_path_rate = 0.1, 
                  norm_layer = nn.LayerNorm, patch_norm = True, 
                  use_checkpoint = False, **kwargs):
-        '''这里depths和num_heas原本是元组，是为了适配源代码中的多尺度不同情况，实际上使用的时候只用一个就可以了'''
         super().__init__()
         # self.num_classes = num_classes
         self.num_layers = len(depths)
@@ -729,7 +774,7 @@ class SPISwinTransformer(nn.Module):
         self.mlp_ratio = mlp_ratio
 
         # 卷积预处理
-        self.feature_map = preCNN(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
+        self.feature_map = preprocess(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
         self.patch_embed = PatchEmbed(
             patch_size = patch_size, in_c = in_channels, embed_dim = embed_dim, 
             norm_layer = norm_layer if self.patch_norm else None)
@@ -741,6 +786,7 @@ class SPISwinTransformer(nn.Module):
 
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
+            # 这里好像和命名不太一样，那篇论文中是block包括layer，这里是layer包括block
             layers = SwinTransformerLayer(dim = int(embed_dim * 2 ** i_layer), 
                                           depth = depths[i_layer], 
                                           num_heads = num_heads[i_layer], 
@@ -762,8 +808,9 @@ class SPISwinTransformer(nn.Module):
         这里的num_classes是分类任务的类别数，如果是0就表示不进行分类任务
         但是这里我是将他的原理挪用到GI图像重构上了，所以这里还得改'''
         # self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+        self.conv2 = block_cnn(in_channels = self.num_features, dropout = dropout)
         self.upsample = UpSample()
-        self.picture = afterCNN(in_channels = self.num_features, img_size = img_size, dropout = dropout)
+        self.picture = last_cnn(in_channels = self.num_features, dropout = dropout)
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -789,6 +836,9 @@ class SPISwinTransformer(nn.Module):
         B, L, C = x.shape
         x = x.view(B, L // 2, L // 2, C)    # [B, H, W, C]
         x = x.permute(0, 3, 1, 2)   # [B, C, H, W]
+
+        x = self.conv2(x)
+        x = x0 + x
 
         x = self.upsample(x)
         output = self.picture(x)
