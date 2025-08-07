@@ -1,5 +1,6 @@
 # 一点一点把他改成swin transformer吧
 
+from re import S
 from tkinter import SE
 import torch
 import torch.nn as nn
@@ -9,8 +10,8 @@ import numpy as np
 from typing import Optional
 
 
-# 在Swin Transformer之前的CNN预处理，生成特征图
-class preprocess(nn.Module):
+# 在Swin Transformer之前的CNN预处理，生成特征图并提取低级特征
+class ShallowFeature(nn.Module):
     def __init__(self, sampling_times, img_size, dropout):
         super().__init__()
         self.sampling_times = sampling_times
@@ -22,28 +23,27 @@ class preprocess(nn.Module):
             )
         self.conv = nn.Sequential(
             nn.Conv2d(1, 1, kernel_size = 3, padding = 'same'), 
+            nn.BatchNorm2d(1), 
             nn.ReLU(), 
             nn.Dropout(dropout), 
             )
     
     def forward(self, x):
+        # 层级结构简单，残差结构不必要
         x = self.fc(x)
         x = x.view(-1, 1, self.img_size, self.img_size)
         output = self.conv(x)
         return output
 
 
-# 在每个transformer block后的卷积
-class transformer_cnn(nn.Module):
-    def __init__(self, in_channels, dropout):
+# 深层特征提取，轻量化卷积可以不使用丢弃法
+class DeepFeature(nn.Module):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.in_channels = in_channels
-        self.dropout = dropout
-
         self.conv = nn.Sequential(
-            nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
-            nn.ReLU(), 
-            nn.Dropout(self.dropout), 
+            nn.Conv2d(in_channels, out_channels, kernel_size = 3, padding = 'same'), 
+            nn.BatchNorm2d(out_channels), 
+            nn.ReLU(),  
             )
 
     def forward(self, x):
@@ -51,51 +51,86 @@ class transformer_cnn(nn.Module):
         return output
 
 
-# 在4个block处理后的CNN模块
-class block_cnn(nn.Module):
-    def __init__(self, in_channels, dropout):
+# 重构回灰度GI图像
+class LastBlock(nn.Module):
+    def __init__(self, in_channels):
         super().__init__()
-        self.in_channels = in_channels
-        self.dropout = dropout
-
+        self.upsample = nn.Upsample(scale_factor = 32)
         self.conv = nn.Sequential(
-            nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
+            nn.Conv2d(in_channels, 1, kernel_size = 3, padding = 'same'), 
+            nn.BatchNorm2d(1), 
             nn.ReLU(), 
-            nn.Dropout(self.dropout), 
             )
 
     def forward(self, x):
+        x = self.upsample(x)
         output = self.conv(x)
         return output
 
 
-# 恢复成GI图像
-class last_cnn(nn.Module):
-    def __init__(self, in_channels, dropout):
-        super().__init__()
-        self.in_channels = in_channels
-        self.dropout = dropout
+# # 在每个transformer block后的卷积
+# class transformer_cnn(nn.Module):
+#     def __init__(self, in_channels, dropout):
+#         super().__init__()
+#         self.in_channels = in_channels
+#         self.dropout = dropout
 
-        self.conv = nn.Sequential(
-            nn.Conv2d(self.in_channels, 1, kernel_size = 3, padding = 'same'), 
-            nn.ReLU(), 
-            nn.Dropout(self.dropout), 
-            )
+#         self.conv = nn.Sequential(
+#             nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
+#             nn.ReLU(), 
+#             nn.Dropout(self.dropout), 
+#             )
 
-    def forward(self, x):
-        output = self.conv(x)
-        return output
+#     def forward(self, x):
+#         output = self.conv(x)
+#         return output
 
 
-# 恢复前的上采样
-class UpSample(nn.Module):
-    def __init__(self, ):
-        super().__init__()
-        self.upsample = nn.Upsample(scale_factor = 32, )
+# # 在4个block处理后的CNN模块
+# class block_cnn(nn.Module):
+#     def __init__(self, in_channels, dropout):
+#         super().__init__()
+#         self.in_channels = in_channels
+#         self.dropout = dropout
 
-    def forward(self, x):
-        output = self.upsample(x)
-        return output
+#         self.conv = nn.Sequential(
+#             nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
+#             nn.ReLU(), 
+#             nn.Dropout(self.dropout), 
+#             )
+
+#     def forward(self, x):
+#         output = self.conv(x)
+#         return output
+
+
+# # 恢复成GI图像
+# class last_cnn(nn.Module):
+#     def __init__(self, in_channels, dropout):
+#         super().__init__()
+#         self.in_channels = in_channels
+#         self.dropout = dropout
+
+#         self.conv = nn.Sequential(
+#             nn.Conv2d(self.in_channels, 1, kernel_size = 3, padding = 'same'), 
+#             nn.ReLU(), 
+#             nn.Dropout(self.dropout), 
+#             )
+
+#     def forward(self, x):
+#         output = self.conv(x)
+#         return output
+
+
+# # 恢复前的上采样
+# class UpSample(nn.Module):
+#     def __init__(self, ):
+#         super().__init__()
+#         self.upsample = nn.Upsample(scale_factor = 32, )
+
+#     def forward(self, x):
+#         output = self.upsample(x)
+#         return output
 
 
 class DropPath(nn.Module):
@@ -520,8 +555,6 @@ class SwinTransformerBlock(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = MLP(in_features = dim, hidden_features = mlp_hidden_dim, act_layer = act_layer, drop = drop)
 
-
-
     def forward(self, x, attn_mask):
         H, W = self.H, self.W
         B, L, C = x.shape
@@ -608,8 +641,6 @@ class SwinTransformerLayer(nn.Module):
         self.use_checkpoint = use_checkpoint
         self.shift_size = window_size // 2      # 设计好的超参数，设置成window_size的一半既能保证计算效率又能提升模型性能
 
-        self.conv = transformer_cnn(in_channels = self.num_features, dropout = dropout)
-
         self.blocks = nn.ModuleList([
             SwinTransformerBlock(
                 dim = dim, 
@@ -623,6 +654,9 @@ class SwinTransformerLayer(nn.Module):
                 drop_path = drop_path[i] if isinstance(drop_path, list) else drop_path, 
                 norm_layer = norm_layer)
             for i in range(depth)])
+
+        # 在四个swin transformer block之后的卷积处理
+        self.conv = DeepFeature(in_channels = dim, out_channels = dim)
 
         if downsample is not None:
             self.downsample = downsample(dim = dim, norm_layer = norm_layer)
@@ -774,7 +808,7 @@ class SPISwinTransformer(nn.Module):
         self.mlp_ratio = mlp_ratio
 
         # 卷积预处理
-        self.feature_map = preprocess(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
+        self.feature_map = ShallowFeature(sampling_times = sampling_times, img_size = img_size, dropout = dropout)
         self.patch_embed = PatchEmbed(
             patch_size = patch_size, in_c = in_channels, embed_dim = embed_dim, 
             norm_layer = norm_layer if self.patch_norm else None)
@@ -800,17 +834,9 @@ class SPISwinTransformer(nn.Module):
                                           downsample = PatchMerging if (i_layer < self.num_layers - 1) else None, 
                                           use_checkpoint = use_checkpoint)
             self.layers.append(layers)
-
         self.norm = norm_layer(self.num_features)
-
-
-        '''问题就出在这里，原本的Swin Transformer是针对ImageNet的分类任务
-        这里的num_classes是分类任务的类别数，如果是0就表示不进行分类任务
-        但是这里我是将他的原理挪用到GI图像重构上了，所以这里还得改'''
-        # self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
-        self.conv2 = block_cnn(in_channels = self.num_features, dropout = dropout)
-        self.upsample = UpSample()
-        self.picture = last_cnn(in_channels = self.num_features, dropout = dropout)
+        self.conv1 = DeepFeature(in_channels = self.num_features, out_channels = self.num_features, dropout = dropout)
+        self.conv2 = LastBlock(in_channels = self.num_features)
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -832,14 +858,12 @@ class SPISwinTransformer(nn.Module):
             x, H, W = layer(x, H, W)
 
         x = self.norm(x)
-
-        B, L, C = x.shape
-        x = x.view(B, L // 2, L // 2, C)    # [B, H, W, C]
-        x = x.permute(0, 3, 1, 2)   # [B, C, H, W]
-
-        x = self.conv2(x)
+        x = self.conv1(x)
         x = x0 + x
 
-        x = self.upsample(x)
-        output = self.picture(x)
+        B, L, C = x.shape
+        x = x.view(B, L % 2, L % 2, C)    # [B, H, W, C]
+        x = x.permute(0, 3, 1, 2)   # [B, C, H, W]
+
+        output = self.conv2(x)
         return output
