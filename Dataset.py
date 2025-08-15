@@ -51,8 +51,8 @@ class GI_Dataset(Dataset):
                 total_time += gi_end_time - gi_start_time
                 gi_start_time = time.time()
         print(f"All ghost images precomputed in {total_time:.4f} seconds.\n")
+        torch.save(self.precomputed_cgi, 'precomputed_cgi.pt')
 
-    
     def __len__(self):
         return self.max_samples
     

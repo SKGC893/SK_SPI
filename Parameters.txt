@@ -1,5 +1,1 @@
 # 调参
-
-2025.8.5 
-SPISwinTransformer参数修改：
-embed_dim(96->64->96)

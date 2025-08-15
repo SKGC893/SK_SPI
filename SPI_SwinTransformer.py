@@ -1,5 +1,3 @@
-# 一点一点把他改成swin transformer吧
-
 from re import S
 from tkinter import SE
 import torch
@@ -68,71 +66,6 @@ class LastBlock(nn.Module):
         return output
 
 
-# # 在每个transformer block后的卷积
-# class transformer_cnn(nn.Module):
-#     def __init__(self, in_channels, dropout):
-#         super().__init__()
-#         self.in_channels = in_channels
-#         self.dropout = dropout
-
-#         self.conv = nn.Sequential(
-#             nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
-#             nn.ReLU(), 
-#             nn.Dropout(self.dropout), 
-#             )
-
-#     def forward(self, x):
-#         output = self.conv(x)
-#         return output
-
-
-# # 在4个block处理后的CNN模块
-# class block_cnn(nn.Module):
-#     def __init__(self, in_channels, dropout):
-#         super().__init__()
-#         self.in_channels = in_channels
-#         self.dropout = dropout
-
-#         self.conv = nn.Sequential(
-#             nn.Conv2d(self.in_channels, self.in_channels, kernel_size = 3, padding = 'same'), 
-#             nn.ReLU(), 
-#             nn.Dropout(self.dropout), 
-#             )
-
-#     def forward(self, x):
-#         output = self.conv(x)
-#         return output
-
-
-# # 恢复成GI图像
-# class last_cnn(nn.Module):
-#     def __init__(self, in_channels, dropout):
-#         super().__init__()
-#         self.in_channels = in_channels
-#         self.dropout = dropout
-
-#         self.conv = nn.Sequential(
-#             nn.Conv2d(self.in_channels, 1, kernel_size = 3, padding = 'same'), 
-#             nn.ReLU(), 
-#             nn.Dropout(self.dropout), 
-#             )
-
-#     def forward(self, x):
-#         output = self.conv(x)
-#         return output
-
-
-# # 恢复前的上采样
-# class UpSample(nn.Module):
-#     def __init__(self, ):
-#         super().__init__()
-#         self.upsample = nn.Upsample(scale_factor = 32, )
-
-#     def forward(self, x):
-#         output = self.upsample(x)
-#         return output
-
-
 class DropPath(nn.Module):
     '''DropPath，也称为 Stochastic Depth，即随机深度
     随机深度的核心思想其实和dropout是类似的，都是在自己所处的层面进行随机丢弃，从而提升模型性能
@@ -194,7 +127,7 @@ class PatchEmbed(nn.Module):
         - patch_size: 每个图像块的变长
         - in_c: 输入通道数
         - embed_dim: 输出token的特征维度'''
-    def __init__(self, patch_size = 4, in_c = 1, embed_dim = 64, norm_layer = None):
+    def __init__(self, patch_size = 4, in_c = 1, embed_dim = 96, norm_layer = None):
         super().__init__()
         patch_size = (patch_size, patch_size)
         self.patch_size = patch_size
@@ -208,7 +141,6 @@ class PatchEmbed(nn.Module):
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
-        # 这里会出现一个问题就是，我这里的x是[B, C, M]的形状，还没有经过卷积层的重构变成特征图
         _, _, H, W = x.shape
 
         # padding，这里这么写是为了提高泛化能力，确保patch长宽不一致的情况也能处理
@@ -264,7 +196,7 @@ class PatchMerging(nn.Module):
         x = x.view(B, H, W, C)
 
         # padding
-        pad_input = (H % 2 != 0) or(W % 2 != 0)
+        pad_input = (H % 2 != 0) or (W % 2 != 0)
         if pad_input:
             x = F.pad(x, (0, 0, 0, W %2, 0, H % 2))     # 在W左侧和H顶部进行填充
 
@@ -636,7 +568,7 @@ class SwinTransformerLayer(nn.Module):
         super().__init__()
         self.dim = dim
         self.depth = depth
-        self.num_heads = num_heads
+        # self.num_heads = num_heads
         self.window_size = window_size
         self.use_checkpoint = use_checkpoint
         self.shift_size = window_size // 2      # 设计好的超参数，设置成window_size的一半既能保证计算效率又能提升模型性能
@@ -774,15 +706,24 @@ class SwinTransformerLayer(nn.Module):
         x0 = x
         attn_mask = self.create_mask(x, H, W)
         for blk in self.blocks:
-            blk.H, blk.W = H, W
+        # for (i, blk) in enumerate(self.blocks):
+            blk.H, blk.W = H, W     # 动态传入了SwinTransformerBlock中的self.H和self.W
             if not torch.jit.is_scripting() and self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x, attn_mask)
             else:
                 x = blk(x, attn_mask)
+
+        # 这里从blocks里出来是[B, L, C]，L = H*W
+        B, L, C = x.shape
+        x = x.view(B, H, W, -1).permute(0, 3, 1, 2)     # [B, C, H, W]
         x = self.conv(x)
-        output = x0 + x
+
+        # 再重构回[B, L, C]的形式进行残差连接
+        x = x.view(B, C, -1).permute(0, 2, 1)
+
+        x = x0 + x
         if self.downsample is not None:
-            x = self.downsample(x, H, W)
+            output = self.downsample(x, H, W)
             H, W = (H + 1) // 2, (W + 1) // 2
 
         return output, H, W
@@ -792,7 +733,7 @@ class SPISwinTransformer(nn.Module):
     def __init__(self, sampling_times, img_size, dropout,   # 这里是卷积预处理的参数
                  patch_size = 4, in_channels = 1, 
                  # num_classes = 1000,    # 这个num_classes是用在图像分类任务中的类别数
-                 embed_dim = 64, 
+                 embed_dim = 96, 
                  depths = (2, 2, 6, 2),     # 每个stage中分别有几个block
                  num_heads = (3, 6, 12, 24),    # 每个stage中的注意力头数
                  window_size = 7, mlp_ratio = 4., qkv_bias = True, 
@@ -835,7 +776,7 @@ class SPISwinTransformer(nn.Module):
                                           use_checkpoint = use_checkpoint)
             self.layers.append(layers)
         self.norm = norm_layer(self.num_features)
-        self.conv1 = DeepFeature(in_channels = self.num_features, out_channels = self.num_features, dropout = dropout)
+        self.conv1 = DeepFeature(in_channels = self.num_features, out_channels = self.num_features)
         self.conv2 = LastBlock(in_channels = self.num_features)
         self.apply(self._init_weights)
 
@@ -858,12 +799,19 @@ class SPISwinTransformer(nn.Module):
             x, H, W = layer(x, H, W)
 
         x = self.norm(x)
+
+        # gemini给我的建议
+        B, L, C = x.shape
+        x = x.view(B, H, W, C).permute(0, 3, 1, 2).contiguous()   # [B, C, H, W]
+
+        # 后面都正常
         x = self.conv1(x)
         x = x0 + x
 
-        B, L, C = x.shape
-        x = x.view(B, L % 2, L % 2, C)    # [B, H, W, C]
-        x = x.permute(0, 3, 1, 2)   # [B, C, H, W]
+        # 如果按照gemini的修改方式，这里就不需要再变形了
+        # B, L, C = x.shape
+        # x = x.view(B, L % 2, L % 2, C)    # [B, H, W, C]
+        # x = x.permute(0, 3, 1, 2)   # [B, C, H, W]
 
         output = self.conv2(x)
         return output

@@ -22,7 +22,7 @@ def main():
     valid_path2: 验证集重构图像存储路径
     drop: dropout丢弃率
     '''
-    M = 20      # 采样率2%
+    M = 128      # 采样率12.5%
     batch_size = 16
     epochs = 40
     img_size = 32
