@@ -53,7 +53,7 @@ class DeepFeature(nn.Module):
 class LastBlock(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor = 32)
+        self.upsample = nn.Upsample(scale_factor = 1)
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, 1, kernel_size = 3, padding = 'same'), 
             nn.BatchNorm2d(1), 
@@ -721,8 +721,9 @@ class SwinTransformerLayer(nn.Module):
         # 再重构回[B, L, C]的形式进行残差连接
         x = x.view(B, C, -1).permute(0, 2, 1)
 
-        x = x0 + x
+        output = x0 + x
         if self.downsample is not None:
+            # print("downsample")
             output = self.downsample(x, H, W)
             H, W = (H + 1) // 2, (W + 1) // 2
 

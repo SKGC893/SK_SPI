@@ -43,6 +43,8 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
         pred是[B, 1000]
         y是[B, C, H, W]
         我觉得问题应该是处理了之后没有重构成图像，还只是一堆数据'''
+        print(f"Y shape: {y.shape}\n")
+        print(f"Pred shape: {pred.shape}\n")
         loss = loss_fn(pred, y)
 
 
