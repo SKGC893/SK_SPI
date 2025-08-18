@@ -3,6 +3,8 @@ import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import logging
+from log import setup_log
 from torch import nn
 from torch.utils.data import Subset, DataLoader  
 from torchvision import datasets, transforms  
@@ -43,8 +45,8 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
         pred是[B, 1000]
         y是[B, C, H, W]
         我觉得问题应该是处理了之后没有重构成图像，还只是一堆数据'''
-        print(f"Y shape: {y.shape}\n")
-        print(f"Pred shape: {pred.shape}\n")
+        logging.info(f"Y shape: {y.shape}\n")
+        logging.info(f"Pred shape: {pred.shape}\n")
         loss = loss_fn(pred, y)
 
 
@@ -97,10 +99,10 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
     train_avg_psnr = train_psnr / batches1
     train_avg_ssim = train_ssim / batches1
 
-    print(f'\nTraining Epoch {epoch+1}')
-    print('-' * 30)
-    print(f"MSE Loss: {train_avg_loss:.6f}")
-    print(f"PSNR: {train_avg_psnr:.4f} dB, SSIM: {train_avg_ssim:.4f}")
+    logging.info(f'\nTraining Epoch {epoch+1}')
+    logging.info('-' * 30)
+    logging.info(f"MSE Loss: {train_avg_loss:.6f}")
+    logging.info(f"PSNR: {train_avg_psnr:.4f} dB, SSIM: {train_avg_ssim:.4f}")
 
     # 验证阶段
     model.eval()
@@ -162,10 +164,10 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
         valid_avg_psnr = valid_psnr / batches2
         valid_avg_ssim = valid_ssim / batches2
 
-        print(f'\nValidating Epoch {epoch+1}')
-        print('=' * 30)
-        print(f"MSE Loss: {valid_avg_loss:.6f}")
-        print(f"PSNR: {valid_avg_psnr:.4f} dB, SSIM: {valid_avg_ssim:.4f}")
+        logging.info(f'\nValidating Epoch {epoch+1}')
+        logging.info('=' * 30)
+        logging.info(f"MSE Loss: {valid_avg_loss:.6f}")
+        logging.info(f"PSNR: {valid_avg_psnr:.4f} dB, SSIM: {valid_avg_ssim:.4f}")
 
         # plt.plot(train_loss_value, label = 'Training Loss')
         # plt.plot(valid_loss_value, label = 'Validation Loss')

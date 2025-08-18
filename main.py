@@ -1,8 +1,10 @@
 import torch
 import time
 import os
+import logging
 import torch.optim as optim
 from torch import nn
+from log import setup_log
 
 from GI import preprocess_hadamard
 from SPI_SwinTransformer import SPISwinTransformer
@@ -39,8 +41,8 @@ def main():
     os.makedirs(valid_path2, exist_ok = True)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"Using {device} now.")
-    print("In images preprocessing.\n")
+    logging.info(f"Using {device} now.")
+    logging.info("In images preprocessing.\n")
     model = SPISwinTransformer(M, img_size, drop).to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
@@ -64,7 +66,7 @@ def main():
     # 模型训练
     for t in range(epochs):
         epoch_start_time = time.time()
-        if t == 0:  print("\nTraining has been started.")
+        if t == 0:  logging.info("\nTraining has been started.")
         train_path1_epoch = os.path.join(train_path1, f"epoch{t + 1}")
         train_path2_epoch = os.path.join(train_path2, f"epoch{t + 1}")
         valid_path1_epoch = os.path.join(valid_path1, f"epoch{t + 1}")
@@ -72,10 +74,10 @@ def main():
         train(train_dataloader, valid_dataloader, model, loss_fn, optimizer, device, t, epochs, 
               train_path1_epoch, train_path2_epoch, valid_path1_epoch, valid_path2_epoch)
         epoch_end_time = time.time()
-        print(f"Epoch {t + 1} completed in {epoch_end_time - epoch_start_time:.4f} seconds.\n")
+        logging.info(f"Epoch {t + 1} completed in {epoch_end_time - epoch_start_time:.4f} seconds.\n")
         total_time += epoch_end_time - epoch_start_time
-    print(f"Total training time: {total_time:.4f} seconds.\n")
-    print("Training has been completed.\n")
+    logging.info(f"Total training time: {total_time:.4f} seconds.\n")
+    logging.info("Training has been completed.\n")
 
     os.makedirs(weights_path, exist_ok=True)
     torch.save(model.state_dict(), f'weights/mnist_model_weights_sample={M}.pth')

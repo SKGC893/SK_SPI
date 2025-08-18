@@ -7,6 +7,8 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import random
+import logging
+from log import setup_log
 from torch.utils.data import Dataset, DataLoader, Subset
 
 from GI import preprocess_hadamard, CGI
@@ -30,7 +32,7 @@ class GI_Dataset(Dataset):
                 gi_start_time = time.time()
             # 获取原始图像
             image, label = self.dataset[i]
-            # print(image.size())
+            # logging.info(image.size())
             
             # 转换为numpy数组并调整形状，这里squeeze()会删除数值是1的维度，因此单通道图像的通道信息会被抹去
             img_np = image.squeeze().numpy()
@@ -45,12 +47,12 @@ class GI_Dataset(Dataset):
             self.precomputed_cgi.append((gi_tensor, image))
 
             if (i+1) % 1000 == 0:
-                print(f"Completed: {i+1}/{self.max_samples}")
+                logging.info(f"Completed: {i+1}/{self.max_samples}")
                 gi_end_time = time.time() 
-                print(f"1000 ghost images completed in {gi_end_time - gi_start_time:.4f} seconds.\n")
+                logging.info(f"1000 ghost images completed in {gi_end_time - gi_start_time:.4f} seconds.\n")
                 total_time += gi_end_time - gi_start_time
                 gi_start_time = time.time()
-        print(f"All ghost images precomputed in {total_time:.4f} seconds.\n")
+        logging.info(f"All ghost images precomputed in {total_time:.4f} seconds.\n")
         torch.save(self.precomputed_cgi, 'precomputed_cgi.pt')
 
     def __len__(self):

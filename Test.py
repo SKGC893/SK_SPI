@@ -3,6 +3,8 @@ import os
 import cv2
 import numpy as np
 import time
+import logging
+from log import setup_log
 from torch import nn
 from torchvision import datasets, transforms  
 from torchvision.transforms import ToTensor  
@@ -112,10 +114,10 @@ def test(dataloader, model, loss_fn, device, test_path1, test_path2):
     test_avg_ssim = test_ssim / batches
 
     # 打印测试结果
-    print("Final Test Results: ")
-    print(f"MSE Loss: {test_avg_loss:.6f}")
-    print(f"PSNR: {test_avg_psnr:.4f} dB")
-    print(f"SSIM: {test_avg_ssim:.4f}")
+    logging.info("Final Test Results: ")
+    logging.info(f"MSE Loss: {test_avg_loss:.6f}")
+    logging.info(f"PSNR: {test_avg_psnr:.4f} dB")
+    logging.info(f"SSIM: {test_avg_ssim:.4f}")
     
 
 def main():
@@ -126,8 +128,8 @@ def main():
     drop = 0.1      # 测试过程会关闭dropout
     speckle, _, _ = preprocess_hadamard(img_size)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"Using {device} now.")
-    print("In images preprocessing.\n")
+    logging.info(f"Using {device} now.")
+    logging.info("In images preprocessing.\n")
 
     model = SPISwinTransformer(M, img_size)
     pred_dict = torch.load(f'weights/stl10_model_weights_sample={M}.pth')
@@ -146,7 +148,7 @@ def main():
     test(test_dataloader, model, loss_fn, device, test_path1, test_path2)
 
     end_time = time.time()
-    print(f"Total testing time: {end_time - start_time:.4f} seconds.\n")
+    logging.info(f"Total testing time: {end_time - start_time:.4f} seconds.\n")
 
 if __name__ == '__main__':
     main()

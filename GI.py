@@ -1,11 +1,14 @@
 import numpy as np
 import torch
-from scipy.linalg import hadamard
 import torch.amp as amp
+import logging
+from log import setup_log
+from scipy.linalg import hadamard
+
 
 # GPU设备设置
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Using {device} to reconstruct gi now.\n")
+logging.info(f"Using {device} to reconstruct gi now.\n")
 
 def preprocess_hadamard(size):
     """生成Hadamard矩阵并转换为PyTorch张量"""

@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>59923892-56a8-47d4-9bc5-34e7ab54867b</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>main.py</StartupFile>
+    <StartupFile>log.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -24,6 +24,7 @@
   <ItemGroup>
     <Compile Include="Dataset.py" />
     <Compile Include="GI.py" />
+    <Compile Include="log.py" />
     <Compile Include="main.py" />
     <Compile Include="SPI_SwinTransformer.py" />
     <Compile Include="Test.py" />
