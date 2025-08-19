@@ -4,12 +4,12 @@ import sys
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
-def setup_log(name = 'main_logger', dir = 'logs', 
+def setup_log(name = 'main)logger', dir = 'logs', 
               console_level = logging.DEBUG, file_level = logging.DEBUG, 
               max_bytes = 10 * 1024 * 1024, backup_count = 5):
     os.makedirs(dir, exist_ok = True)
 
-    log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
+    log_filename = datetime.now().strftime("SPISwinTransformer_%Y-%m-%d_%H-%M-%S.log")
     log_filepath = os.path.join(dir, log_filename)
 
     logger = logging.getLogger(name)
@@ -17,7 +17,7 @@ def setup_log(name = 'main_logger', dir = 'logs',
     if logger.handlers:
         return logger
 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(message)s')
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(console_level)
