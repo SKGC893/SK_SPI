@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
-from log import setup_log
+from log import setup_log, logger
 from torch import nn
 from torch.utils.data import Subset, DataLoader  
 from torchvision import datasets, transforms  
@@ -45,10 +45,9 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
         pred是[B, 1000]
         y是[B, C, H, W]
         我觉得问题应该是处理了之后没有重构成图像，还只是一堆数据'''
-        logging.info(f"Y shape: {y.shape}\n")
-        logging.info(f"Pred shape: {pred.shape}\n")
+        # logger.debug(f"Y shape: {y.shape}\n")
+        # logger.debug(f"Pred shape: {pred.shape}\n")
         loss = loss_fn(pred, y)
-
 
         optimizer.zero_grad()
         scaler.scale(loss).backward() # <-- 使用scaler.scale(loss)
@@ -99,10 +98,10 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
     train_avg_psnr = train_psnr / batches1
     train_avg_ssim = train_ssim / batches1
 
-    logging.info(f'\nTraining Epoch {epoch+1}')
-    logging.info('-' * 30)
-    logging.info(f"MSE Loss: {train_avg_loss:.6f}")
-    logging.info(f"PSNR: {train_avg_psnr:.4f} dB, SSIM: {train_avg_ssim:.4f}")
+    logger.debug(f'Training Epoch {epoch+1}')
+    # logger.debug('-' * 30)
+    logger.debug(f"MSE Loss: {train_avg_loss:.4f}")
+    logger.debug(f"PSNR: {train_avg_psnr:.4f} dB, SSIM: {train_avg_ssim:.4f}")
 
     # 验证阶段
     model.eval()
@@ -116,9 +115,11 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
             x, y = x.to(device), y.to(device)
             x = x.squeeze(1)# .squeeze(-1) # 将 [batch_size, 1, M, 1] 变为 [batch_size, M]
 
-            with amp.autocast('cuda'): # 自动混合精度
-                pred = model(x)
-                loss = loss_fn(pred, y) # <-- 修正
+            # with amp.autocast('cuda'): # 自动混合精度
+            #     pred = model(x)
+            #     loss = loss_fn(pred, y) # <-- 修正
+            pred = model(x)
+            loss = loss_fn(pred, y)
 
             valid_loss += loss.item()
             batch_psnr = 0.
@@ -164,10 +165,10 @@ def train(dataloader1, dataloader2, model, loss_fn, optimizer, device, epoch, ep
         valid_avg_psnr = valid_psnr / batches2
         valid_avg_ssim = valid_ssim / batches2
 
-        logging.info(f'\nValidating Epoch {epoch+1}')
-        logging.info('=' * 30)
-        logging.info(f"MSE Loss: {valid_avg_loss:.6f}")
-        logging.info(f"PSNR: {valid_avg_psnr:.4f} dB, SSIM: {valid_avg_ssim:.4f}")
+        logger.debug(f'Validating Epoch {epoch+1}')
+        # logger.debug('=' * 30)
+        logger.debug(f"MSE Loss: {valid_avg_loss:.6f}")
+        logger.debug(f"PSNR: {valid_avg_psnr:.4f} dB, SSIM: {valid_avg_ssim:.4f}")
 
         # plt.plot(train_loss_value, label = 'Training Loss')
         # plt.plot(valid_loss_value, label = 'Validation Loss')

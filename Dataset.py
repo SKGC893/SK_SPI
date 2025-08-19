@@ -8,18 +8,19 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import random
 import logging
-from log import setup_log
+from log import setup_log, logger
 from torch.utils.data import Dataset, DataLoader, Subset
 
 from GI import preprocess_hadamard, CGI
 
 class GI_Dataset(Dataset):
-    def __init__(self, dataset, M, img_size, speckle_matrix):
+    def __init__(self, dataset, M, img_size, speckle_matrix, name):
         self.dataset = dataset
         self.max_samples = len(dataset)
         self.sample = M
         self.size = img_size
         self.speckle_matrix = speckle_matrix
+        self.name = name
         
         # 预先计算所有样本的CGI重构结果
         self.precomputed_cgi = []
@@ -32,7 +33,7 @@ class GI_Dataset(Dataset):
                 gi_start_time = time.time()
             # 获取原始图像
             image, label = self.dataset[i]
-            # logging.info(image.size())
+            # logger.debug(image.size())
             
             # 转换为numpy数组并调整形状，这里squeeze()会删除数值是1的维度，因此单通道图像的通道信息会被抹去
             img_np = image.squeeze().numpy()
@@ -46,13 +47,13 @@ class GI_Dataset(Dataset):
             
             self.precomputed_cgi.append((gi_tensor, image))
 
-            if (i+1) % 1000 == 0:
-                logging.info(f"Completed: {i+1}/{self.max_samples}")
+            if (i+1) % 10000 == 0:
+                logger.debug(f"Completed: {i+1}/{self.max_samples}")
                 gi_end_time = time.time() 
-                logging.info(f"1000 ghost images completed in {gi_end_time - gi_start_time:.4f} seconds.\n")
+                # logger.debug(f"1000 ghost images completed in {gi_end_time - gi_start_time:.4f} seconds.\n")
                 total_time += gi_end_time - gi_start_time
                 gi_start_time = time.time()
-        logging.info(f"All ghost images precomputed in {total_time:.4f} seconds.\n")
+        logger.debug(f"{self.name} ghost images precomputed in {total_time:.4f} seconds.\n")
         torch.save(self.precomputed_cgi, 'precomputed_cgi.pt')
 
     def __len__(self):
@@ -98,12 +99,12 @@ def get_dataloader(M, img_size, speckle_matrix, batch_size):
     valid_data = Subset(train_imgs, indices[train_size:])
 
     train_dataloader = DataLoader(
-        GI_Dataset(train_data, M, img_size, speckle_matrix), 
+        GI_Dataset(train_data, M, img_size, speckle_matrix, name = 'Train', ), 
         batch_size = batch_size, 
         shuffle = True, 
         )
     valid_dataloader = DataLoader(
-        GI_Dataset(valid_data, M, img_size, speckle_matrix), 
+        GI_Dataset(valid_data, M, img_size, speckle_matrix, name = 'Validate', ), 
         batch_size = batch_size, 
         shuffle = True, 
         )

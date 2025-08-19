@@ -723,7 +723,7 @@ class SwinTransformerLayer(nn.Module):
 
         output = x0 + x
         if self.downsample is not None:
-            # logging.info("downsample")
+            # logger.debug("downsample")
             output = self.downsample(x, H, W)
             H, W = (H + 1) // 2, (W + 1) // 2
 

@@ -5,9 +5,9 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
 def setup_log(name = 'main_logger', dir = 'logs', 
-              console_level = logging.INFO, file_level = logging.INFO, 
+              console_level = logging.DEBUG, file_level = logging.DEBUG, 
               max_bytes = 10 * 1024 * 1024, backup_count = 5):
-    os.makedir(dir, exist_ok = True)
+    os.makedirs(dir, exist_ok = True)
 
     log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
     log_filepath = os.path.join(dir, log_filename)
